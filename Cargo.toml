@@ -1,0 +1,68 @@
+[package]
+name = "opacity"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+lazy_static = "1.4"
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "time"] }
+
+ffi-support = "0.4"
+chrono = "0.4"
+elliptic-curve = { version = "0.13.5", features = ["pkcs8"] }
+futures = "0.3"
+futures-util = "0.3.28"
+getrandom = { version = "0.2", features = ["js"] }
+js-sys = "0.3.64"
+p256 = { version = "0.13", features = ["pem", "ecdsa"] }
+rayon = "1.5"
+
+url = { version = "2.0", features = ["serde"] }
+pin-project-lite = "0.2.4"
+
+http-body-util = "0.1"
+hyper = { version = "1.1", features = ["client", "http1"] }
+
+
+rustls = { version = "0.21" }
+rustls-pemfile = { version = "1.0.2" }
+
+ring = { version = "0.17" }
+
+# time crate: https://crates.io/crates/time
+# NOTE: It is required, otherwise "time not implemented on this platform" error happens right after "!@# 2".
+# Probably due to tokio's time feature is used in tlsn-prover?
+time = { version = "0.3.34", features = ["wasm-bindgen"] }
+# Used to calculate elapsed time.
+web-time = "1.0"
+notary-server= { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "notary-server" }
+tlsn-core = { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "tlsn-core" }
+tlsn-verifier= { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "tlsn-verifier" }
+tlsn-prover = { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "tlsn-prover", features = [
+  "tracing",
+] }
+
+
+tokio-util = "0.7"
+hyper-util = { version = "0.1", features = ["full"] }
+
+
+tokio-rustls = { version = "0.24.1" }
+
+serde = { version = "1.0.188", features = ["derive"] }
+serde_json = { version = "1.0.106", features = ["raw_value"] }
+serde_derive = "1.0.188"
+rand = "0.8.5"
+eyre = "0.6.8"
+dotenv = "0.15.0"
+
+[[example]]
+name = "prover"
+path = "prover/simple_prover.rs"
+
+[[example]]
+name = "verifier"
+path = "prover/simple_verifier.rs"
