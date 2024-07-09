@@ -63,7 +63,7 @@ async fn main() {
         .unwrap_or_else(|_| panic!("Can't connect to server"));
 
     let (tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
-
+    let ctrl = prover_fut.control();
     let prover_task = tokio::spawn(prover_fut);
 
     let (mut request_sender, connection) =
@@ -72,6 +72,8 @@ async fn main() {
             .unwrap();
 
     tokio::spawn(connection);
+
+    ctrl.defer_decryption().await.unwrap();
 
     let mut builder = Request::builder().uri(notarization_request.path);
 
@@ -97,7 +99,7 @@ async fn main() {
 
     let prover = prover_task.await.unwrap().unwrap().start_notarize();
 
-    let redact = notarization_request.redact_string.is_empty();
+    let redact = false;
     let proof = if !redact {
         build_proof_without_redactions(prover).await
     } else {
