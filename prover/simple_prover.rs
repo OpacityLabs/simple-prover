@@ -1,120 +1,111 @@
 // Runs a simple Prover which connects to the Notary and notarizes a request/response from
 // example.com. The Prover then generates a proof and writes it to disk.
 
-use http_body_util::Empty;
+use dotenv::dotenv;
+use http_body_util::{BodyExt, Empty};
 use hyper::{body::Bytes, Request, StatusCode};
 use hyper_util::rt::TokioIo;
+use opacity::{read_env_vars, tls_prover};
+use serde::{Deserialize, Serialize};
+use std::env;
 use std::ops::Range;
 use tlsn_core::proof::TlsProof;
+use tlsn_prover::tls::{state::Notarize, Prover, ProverConfig};
 use tokio::io::AsyncWriteExt as _;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use opacity::run_notary;
-use tlsn_prover::tls::{state::Notarize, Prover, ProverConfig};
-use std::str;
-use serde::{Deserialize, Serialize};
-
+const MAX_SENT_DATA: usize = 1 << 13;
+const MAX_RECV_DATA: usize = 1 << 13;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct NotarizationRequest {
     host: String,
     path: String,
     headers: Vec<(String, String)>,
-    redact_strings: Vec<String>,
+    redact_string: String,
 }
 
-
-const NOTARIZATION_REQUEST_STR:&str = r###"
+const NOTARIZATION_REQUEST_STR: &str = r###"
 {
     "host":"trading-api.kalshi.com",
     "path":"/trade-api/v2/exchange/schedule",
-    "headers":[["Accept","application/json"],["Accept-Encoding","Identity"],["Host","trading-api.kalshi.com"],["Connection","close"]],
-    "redact_strings":[]
+    "headers":[["Accept","application/json"],["Accept-Encoding","Identity"],["Host","trading-api.kalshi.com"],["Connection","close"], ["User-Agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15"]],
+    "redact_string":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15"
 }
 "###;
-
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let notarization_request: NotarizationRequest = serde_json::from_str(NOTARIZATION_REQUEST_STR).unwrap();
-    let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
-    
-    // // Start a local simple notary service
-    tokio::spawn(run_notary(notary_socket.compat()));
+    let (notary_host, notary_port) = read_env_vars();
 
-    println!("Notarization request sent to the Notary");
+    let notarization_request: NotarizationRequest =
+        serde_json::from_str(NOTARIZATION_REQUEST_STR).unwrap();
 
+    let (notary_socket, session_id) = tls_prover(notary_host, notary_port).await;
 
-    // A Prover configuration
-    let config = ProverConfig::builder()
-    .id("example")
-
+    let prover_config = ProverConfig::builder()
+        .id(session_id)
         .server_dns(notarization_request.clone().host)
+        .max_sent_data(MAX_SENT_DATA)
+        .max_recv_data(MAX_RECV_DATA)
+        // .root_cert_store(root_cert_store)
         .build()
         .unwrap();
 
-    // Create a Prover and set it up with the Notary
-    // This will set up the MPC backend prior to connecting to the server.
-    let prover = Prover::new(config)
-        .setup(prover_socket.compat())
+    println!("Setting up prover");
+    let prover = Prover::new(prover_config)
+        .setup(notary_socket.compat())
         .await
         .unwrap();
 
-    // Connect to the Server via TCP. This is the TLS client socket.
-    let client_socket = tokio::net::TcpStream::connect((notarization_request.clone().host, 443))
+    println!("Setup prover");
+    let client_socket = tokio::net::TcpStream::connect((notarization_request.host.as_str(), 443))
         .await
-        .unwrap();
+        .unwrap_or_else(|err| panic!("Can't connect to server"));
 
-    // Bind the Prover to the server connection.
-    // The returned `mpc_tls_connection` is an MPC TLS connection to the Server: all data written
-    // to/read from it will be encrypted/decrypted using MPC with the Notary.
-    let (mpc_tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
-    let mpc_tls_connection = TokioIo::new(mpc_tls_connection.compat());
+    let (tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
 
-    // Spawn the Prover task to be run concurrently
     let prover_task = tokio::spawn(prover_fut);
 
-    // Attach the hyper HTTP client to the MPC TLS connection
     let (mut request_sender, connection) =
-        hyper::client::conn::http1::handshake(mpc_tls_connection)
+        hyper::client::conn::http1::handshake(TokioIo::new(tls_connection.compat()))
             .await
             .unwrap();
 
-    // Spawn the HTTP task to be run concurrently
     tokio::spawn(connection);
 
-    // Build a simple HTTP request with common headers
-    let mut builder = Request::builder()
-    .uri(notarization_request.clone().path);
+    let mut builder = Request::builder().uri(notarization_request.path);
 
-    for (header_name, header_value) in notarization_request.clone().headers.clone() {
-
+    for (header_name, header_value) in notarization_request.headers.clone() {
         builder = builder.header(header_name, header_value);
     }
 
     let request = builder.body(Empty::<Bytes>::new()).unwrap();
 
+    println!("Sending request to server: {:?}", request);
 
-    println!("Starting an MPC TLS connection with the server");
-
-    // Send the request to the Server and get a response via the MPC TLS connection
     let response = request_sender.send_request(request).await.unwrap();
-
-    println!("Got a response from the server");
 
     assert!(response.status() == StatusCode::OK);
 
-    // The Prover task should be done now, so we can grab the Prover.
-    let prover = prover_task.await.unwrap().unwrap();
+    let payload = response.into_body().collect().await.unwrap().to_bytes();
+    println!(
+        "Received response from server: {:?}",
+        &String::from_utf8_lossy(&payload)
+    );
 
-    // Prepare for notarization.
-    let prover = prover.start_notarize();
+    // server_task.await.unwrap().unwrap();
 
-    // Build proof (with or without redactions);
-    let proof =  build_proof_with_redactions(prover, notarization_request.clone().redact_strings).await;
+    let prover = prover_task.await.unwrap().unwrap().start_notarize();
 
-    // Write the proof to a file
+    let redact = notarization_request.redact_string.is_empty();
+    let proof = if !redact {
+        build_proof_without_redactions(prover).await
+    } else {
+        build_proof_with_redactions(prover, &notarization_request.redact_string).await
+    };
+
     let mut file = tokio::fs::File::create("simple_proof.json").await.unwrap();
     file.write_all(serde_json::to_string_pretty(&proof).unwrap().as_bytes())
         .await
@@ -182,32 +173,28 @@ async fn build_proof_without_redactions(mut prover: Prover<Notarize>) -> TlsProo
     }
 }
 
-async fn build_proof_with_redactions(mut prover: Prover<Notarize>, redact_strings: Vec<String>) -> TlsProof {
+async fn build_proof_with_redactions(
+    mut prover: Prover<Notarize>,
+    redact_string: &str,
+) -> TlsProof {
     // Identify the ranges in the outbound data which contain data which we want to disclose
-    let mut redact_strings_vec: Vec<Vec<u8>> = Vec::new();
-
-    redact_strings.iter().for_each(|(redacted)| {
-        redact_strings_vec.push(redacted.as_bytes().to_vec());
-    });
-
     let (sent_public_ranges, _) = find_ranges(
         prover.sent_transcript().data(),
-        redact_strings_vec
-            .iter()
-            .map(|r| r.as_slice())
-            .collect::<Vec<_>>()
-            .as_slice(),
+        &[
+            // Redact the value of the "User-Agent" header. It will NOT be disclosed.
+            redact_string.as_bytes(),
+        ],
     );
 
     // Identify the ranges in the inbound data which contain data which we want to disclose
     let (recv_public_ranges, _) = find_ranges(
         prover.recv_transcript().data(),
-        redact_strings_vec
-            .iter()
-            .map(|r| r.as_slice())
-            .collect::<Vec<_>>()
-            .as_slice(),
+        &[
+            // Redact the value of the title. It will NOT be disclosed.
+            "Example Domain".as_bytes(),
+        ],
     );
+
     let builder = prover.commitment_builder();
 
     // Commit to each range of the public outbound data which we want to disclose

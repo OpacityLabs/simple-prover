@@ -1,26 +1,58 @@
-use elliptic_curve::pkcs8::DecodePrivateKey;
-use futures::{AsyncRead, AsyncWrite};
+use dotenv::dotenv;
+use notary_client::{NotarizationRequest, NotaryClient, NotaryConnection};
+use notary_server::read_pem_file;
+use rustls::{Certificate, RootCertStore};
+use serde::{Deserialize, Serialize};
+use std::env;
 
-use tlsn_verifier::tls::{Verifier, VerifierConfig};
+/// Response object of the /info API
 
-const NOTARY_KEY_STR: &str = "-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgEvBc/VMWn3E4PGfe
-ETc/ekdTRmRwNN9J6eKDPxJ98ZmhRANCAAQG/foUjhkWzMlrQNAUnfBYJe9UsWtx
-HMwbmRpN4cahLMO7pwWrHe4RZikUajoLQQ5SB/6YSBuS0utehy/nIfMq
------END PRIVATE KEY-----";
+const MAX_SENT_DATA: usize = 1 << 13;
+const MAX_RECV_DATA: usize = 1 << 13;
 
-/// Runs a simple Notary with the provided connection to the Prover.
-pub async fn run_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn: T) {
+pub fn read_env_vars() -> (String, u16) {
+    dotenv().ok();
+    let notary_host = env::var("NOTARY_HOST").unwrap_or_else(|_| panic!("$NOTARY_HOST not set"));
 
-    let signing_key = p256::ecdsa::SigningKey::from_pkcs8_pem(NOTARY_KEY_STR).unwrap();
+    let notary_port_string =
+        env::var("NOTARY_PORT").unwrap_or_else(|_| panic!("$NOTARY_HOST not set"));
 
-    // Setup default config. Normally a different ID would be generated
-    // for each notarization.
-    let config = VerifierConfig::builder().id("example").build().unwrap();
+    let notary_port = notary_port_string
+        .parse::<u16>()
+        .unwrap_or_else(|_| panic!("$NOTARY_PORT must be a number"));
 
-    Verifier::new(config)
-        .notarize::<_, p256::ecdsa::Signature>(conn, &signing_key)
-        .await
-        .unwrap();
+    (notary_host, notary_port)
 }
 
+pub async fn tls_prover(host: String, port: u16) -> (NotaryConnection, String) {
+    let mut certificate_file_reader = read_pem_file("fixture/opacityCA.crt").await.unwrap();
+    let mut certificates: Vec<Certificate> = rustls_pemfile::certs(&mut certificate_file_reader)
+        .unwrap()
+        .into_iter()
+        .map(Certificate)
+        .collect();
+    let certificate = certificates.remove(0);
+
+    let mut root_cert_store = RootCertStore::empty();
+    root_cert_store.add(&certificate).unwrap();
+
+    let notary_client = NotaryClient::builder()
+        .host(&host)
+        .port(port)
+        .root_cert_store(root_cert_store)
+        .build()
+        .unwrap();
+
+    let notarization_request = NotarizationRequest::builder()
+        .max_sent_data(MAX_SENT_DATA)
+        .max_recv_data(MAX_RECV_DATA)
+        .build()
+        .unwrap();
+
+    let accepted_request = notary_client
+        .request_notarization(notarization_request)
+        .await
+        .unwrap();
+
+    (accepted_request.io, accepted_request.id)
+}

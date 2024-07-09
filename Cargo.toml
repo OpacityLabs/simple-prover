@@ -8,7 +8,10 @@ publish = false
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 lazy_static = "1.4"
 tracing = { version = "0.1", features = ["log"] }
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "time"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+  "fmt",
+  "time",
+] }
 
 ffi-support = "0.4"
 chrono = "0.4"
@@ -25,8 +28,7 @@ pin-project-lite = "0.2.4"
 
 http-body-util = "0.1"
 hyper = { version = "1.1", features = ["client", "http1"] }
-
-
+reqwest = { version = "0.11", features = ["json"] }
 rustls = { version = "0.21" }
 rustls-pemfile = { version = "1.0.2" }
 
@@ -38,12 +40,12 @@ ring = { version = "0.17" }
 time = { version = "0.3.34", features = ["wasm-bindgen"] }
 # Used to calculate elapsed time.
 web-time = "1.0"
-notary-server= { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "notary-server" }
-tlsn-core = { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "tlsn-core" }
-tlsn-verifier= { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "tlsn-verifier" }
-tlsn-prover = { git = "https://github.com/OpacityLabs/opacity-mpc-tls.git", package = "tlsn-prover", features = [
-  "tracing",
-] }
+notary-server = { git = "https://github.com/OpacityLabs/tlsn", package = "notary-server" }
+tlsn-core = { git = "https://github.com/OpacityLabs/tlsn", package = "tlsn-core" }
+tlsn-verifier = { git = "https://github.com/OpacityLabs/tlsn", package = "tlsn-verifier" }
+tlsn-prover = { git = "https://github.com/OpacityLabs/tlsn", package = "tlsn-prover" }
+notary-client = { git = "https://github.com/OpacityLabs/tlsn", package = "notary-client" }
+tls-core = { git = "https://github.com/OpacityLabs/tlsn", package = "tlsn-tls-core" }
 
 
 tokio-util = "0.7"
