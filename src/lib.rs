@@ -2,7 +2,6 @@ use dotenv::dotenv;
 use notary_client::{NotarizationRequest, NotaryClient, NotaryConnection};
 use notary_server::read_pem_file;
 use rustls::{Certificate, RootCertStore};
-use serde::{Deserialize, Serialize};
 use std::env;
 
 /// Response object of the /info API

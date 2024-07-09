@@ -60,7 +60,7 @@ async fn main() {
     println!("Setup prover");
     let client_socket = tokio::net::TcpStream::connect((notarization_request.host.as_str(), 443))
         .await
-        .unwrap_or_else(|err| panic!("Can't connect to server"));
+        .unwrap_or_else(|_| panic!("Can't connect to server"));
 
     let (tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
 

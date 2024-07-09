@@ -1,14 +1,8 @@
-use dotenv::dotenv;
 use elliptic_curve::pkcs8::DecodePublicKey;
-use hyper::body::Buf;
-use hyper::Request;
-use hyper::Uri;
-use reqwest::Error;
-
 use opacity::read_env_vars;
 use reqwest::ClientBuilder;
+use reqwest::Error;
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 use std::{str, time::Duration};
 use tlsn_core::proof::{SessionProof, TlsProof};
 
