@@ -1,13 +1,11 @@
 // Runs a simple Prover which connects to the Notary and notarizes a request/response from
 // example.com. The Prover then generates a proof and writes it to disk.
 
-use dotenv::dotenv;
 use http_body_util::{BodyExt, Empty};
 use hyper::{body::Bytes, Request, StatusCode};
 use hyper_util::rt::TokioIo;
 use opacity::{read_env_vars, tls_prover};
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::ops::Range;
 use tlsn_core::proof::TlsProof;
 use tlsn_prover::tls::{state::Notarize, Prover, ProverConfig};
