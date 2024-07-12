@@ -101,7 +101,13 @@ async fn notary_pubkey(notary_host: String, notary_port: u16) -> Result<p256::Pu
     // Parse the response body as JSON into the ApiResponse struct
     let info_response: InfoResponse = response.json().await?;
 
-    let public_key = p256::PublicKey::from_public_key_pem(&info_response.public_key).unwrap();
+    let public_key = p256::PublicKey::from_public_key_pem(
+        "-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQNWSL12YrLDPIN9JsFG+HfGMbiA8
+gONyusY99DHpDw1UpbXmymUK3ql1ZYydIVGyJAqTC3u1AFpSriV6exgUMQ==
+-----END PUBLIC KEY-----",
+    )
+    .unwrap();
 
     Ok(public_key)
 }

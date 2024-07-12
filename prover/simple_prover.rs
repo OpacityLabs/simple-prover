@@ -63,7 +63,7 @@ async fn main() {
         .unwrap_or_else(|_| panic!("Can't connect to server"));
 
     let (tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
-    let ctrl = prover_fut.control();
+    // let ctrl = prover_fut.control();
     let prover_task = tokio::spawn(prover_fut);
 
     let (mut request_sender, connection) =
@@ -73,7 +73,7 @@ async fn main() {
 
     tokio::spawn(connection);
 
-    ctrl.defer_decryption().await.unwrap();
+    // ctrl.defer_decryption().await.unwrap();
 
     let mut builder = Request::builder().uri(notarization_request.path);
 
