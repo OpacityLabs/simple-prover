@@ -68,3 +68,7 @@ path = "prover/simple_prover.rs"
 [[example]]
 name = "verifier"
 path = "prover/simple_verifier.rs"
+
+[[bin]]
+name = "prover"
+path = "src/bin/prover.rs"
