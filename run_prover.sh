@@ -7,8 +7,9 @@ while true; do
     if [ -z "$node_url" ] || [ "$node_url" == "null" ]; then
         echo "Failed to get a valid node_url. Retrying in 5 seconds..."
     else
-        echo "Running prover with node_url: $node_url"
         
+        node_url=${node_url#http://}
+        echo "Running prover with node_url: $node_url"
         ./target/release/prover $node_url 7047
         
         if [ $? -eq 0 ]; then
